@@ -1,0 +1,6 @@
+{
+  "name": "Reimbursement and Payroll Tracker",
+  "description": "A secure, role-based workflow tracker for managing reimbursement and payroll voucher transactions from document receipt to completion with detailed audit logs.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
