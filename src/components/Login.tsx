@@ -40,7 +40,7 @@ export default function Login({ users, onLoginSuccess, onUpdateUser, onAddSecuri
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
-  const [showRetrieveAccounts, setShowRetrieveAccounts] = useState(false);
+  const [showRetrieveAccounts, setShowRetrieveAccounts] = useState(true);
   const [retrievedMessage, setRetrievedMessage] = useState<string | null>(null);
   const [forgotUsername, setForgotUsername] = useState("");
   const [isConnecting, setIsConnecting] = useState(false);
@@ -106,7 +106,8 @@ export default function Login({ users, onLoginSuccess, onUpdateUser, onAddSecuri
     }
 
     // Verify password
-    if (foundUser.passwordHash !== password) {
+    const userPass = foundUser.passwordHash || (foundUser.role === UserRole.ADMIN ? "admin123" : "pass123");
+    if (userPass !== password) {
       setError("Incorrect password. Please try again or retrieve credentials.");
       return;
     }
@@ -178,9 +179,9 @@ export default function Login({ users, onLoginSuccess, onUpdateUser, onAddSecuri
 
   const handleQuickLogin = (user: User) => {
     setUsername(user.username);
-    setPassword(user.passwordHash || "pass123");
+    const pass = user.passwordHash || (user.role === UserRole.ADMIN ? "admin123" : "pass123");
+    setPassword(pass);
     setError(null);
-    setShowRetrieveAccounts(false);
   };
 
   const handleForgotPasswordSubmit = (e: React.FormEvent) => {
@@ -192,8 +193,9 @@ export default function Login({ users, onLoginSuccess, onUpdateUser, onAddSecuri
 
     const found = users.find((u) => u.username.toLowerCase() === forgotUsername.trim().toLowerCase());
     if (found) {
+      const pass = found.passwordHash || (found.role === UserRole.ADMIN ? "admin123" : "pass123");
       setRetrievedMessage(
-        `Account Found! Password for user "${found.username}" is "${found.passwordHash}".`
+        `Account Found! Password for user "${found.username}" is "${pass}".`
       );
     } else {
       setRetrievedMessage("Username not found in our directory.");
@@ -414,7 +416,7 @@ export default function Login({ users, onLoginSuccess, onUpdateUser, onAddSecuri
                   value={forgotUsername}
                   onChange={(e) => setForgotUsername(e.target.value)}
                   className="block w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:bg-white focus:border-blue-700 font-semibold"
-                  placeholder="e.g. jsmith"
+                  placeholder="e.g. admin or encoder1"
                 />
               </div>
 
@@ -630,39 +632,50 @@ export default function Login({ users, onLoginSuccess, onUpdateUser, onAddSecuri
             </button>
 
             {showRetrieveAccounts && (
-              <div className="mt-4 bg-slate-50 border border-slate-200 rounded-2xl p-4 text-left animate-slide-up max-h-[180px] overflow-y-auto">
-                <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider mb-2">
-                  Pangasinan Provincial Accountant Accounts
-                </span>
+              <div className="mt-4 bg-slate-50 border border-slate-200 rounded-2xl p-4 text-left animate-slide-up max-h-[250px] overflow-y-auto">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">
+                    Authorized Demo Accounts ({users.length})
+                  </span>
+                  <span className="text-[9px] text-blue-700 font-semibold">Click to autofill credentials</span>
+                </div>
                 <div className="space-y-1.5">
-                  {users.map((u) => (
-                    <div
-                      key={u.id}
-                      onClick={() => !isConnecting && handleQuickLogin(u)}
-                      className={`p-2.5 bg-white border border-slate-200 rounded-xl text-[11px] flex justify-between items-center transition-all ${
-                        isConnecting
-                          ? "opacity-50 cursor-not-allowed"
-                          : "hover:bg-amber-50 cursor-pointer hover:border-amber-300"
-                      }`}
-                    >
-                      <div className="min-w-0 flex-1 pr-2">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-slate-800 truncate block">{u.employeeName}</span>
-                          {u.mfaEnabled && (
-                            <span className="bg-emerald-100 text-emerald-800 font-bold text-[8px] px-1 rounded flex items-center gap-0.5 shrink-0" title="MFA Secured">
-                              <Lock className="w-2 h-2" />
-                              MFA
-                            </span>
-                          )}
+                  {users.map((u) => {
+                    const pass = u.passwordHash || (u.role === UserRole.ADMIN ? "admin123" : "pass123");
+                    return (
+                      <div
+                        key={u.id}
+                        onClick={() => !isConnecting && handleQuickLogin(u)}
+                        className={`p-2.5 bg-white border border-slate-200 rounded-xl text-[11px] flex justify-between items-center transition-all ${
+                          isConnecting
+                            ? "opacity-50 cursor-not-allowed"
+                            : "hover:bg-amber-50 cursor-pointer hover:border-amber-300"
+                        }`}
+                      >
+                        <div className="min-w-0 flex-1 pr-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-slate-800 truncate block">{u.employeeName}</span>
+                            {u.mfaEnabled && (
+                              <span className="bg-emerald-100 text-emerald-800 font-bold text-[8px] px-1 rounded flex items-center gap-0.5 shrink-0" title="MFA Secured">
+                                <Lock className="w-2 h-2" />
+                                MFA
+                              </span>
+                            )}
+                            {!u.isActive && (
+                              <span className="bg-red-100 text-red-700 font-bold text-[8px] px-1 rounded shrink-0">
+                                Deactivated
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-slate-400 block truncate">{u.role.split(" / ")[0]} ({u.position})</span>
                         </div>
-                        <span className="text-[10px] text-slate-400 block truncate">{u.role.split(" / ")[0]} ({u.position})</span>
+                        <div className="text-right shrink-0">
+                          <span className="font-mono font-bold text-blue-900 block">{u.username}</span>
+                          <span className="text-[9px] font-mono text-slate-500 block">PW: <span className="font-bold text-slate-700">{pass}</span></span>
+                        </div>
                       </div>
-                      <div className="text-right shrink-0">
-                        <span className="font-mono font-bold text-blue-900 block">{u.username}</span>
-                        <span className="text-[9px] font-mono text-slate-400 block">PW: {u.passwordHash || "pass123"}</span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
