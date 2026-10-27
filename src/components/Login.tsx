@@ -158,7 +158,7 @@ export default function Login({ users, onLoginSuccess, onUpdateUser, onAddSecuri
 
       // Audit Trail security log entry
       const log: SecurityLogEntry = {
-        id: "sec-" + Date.now(),
+        id: `sec-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
         timestamp,
         actorId: mfaUser.id,
         actorName: mfaUser.employeeName,

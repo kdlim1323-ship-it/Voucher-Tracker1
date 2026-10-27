@@ -170,7 +170,7 @@ export default function UserManagement({
     const existingUser = isEditing ? users.find((u) => u.id === userId) : null;
 
     const payload: User = {
-      id: isEditing ? userId : "usr-" + Date.now(),
+      id: isEditing ? userId : `usr-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       username: username.trim(),
       employeeName: employeeName.trim(),
       employeeId: employeeId.trim(),
@@ -189,7 +189,7 @@ export default function UserManagement({
       const wasEnabled = existingUser.mfaEnabled || false;
       if (wasEnabled !== mfaEnabled) {
         onAddSecurityLog({
-          id: "sec-" + Date.now(),
+          id: `sec-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
           timestamp: new Date().toISOString(),
           actorId: currentUser.id,
           actorName: currentUser.employeeName,
@@ -654,8 +654,8 @@ export default function UserManagement({
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium">
                 {securityLogs.length > 0 ? (
-                  securityLogs.map((log) => (
-                    <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
+                  securityLogs.map((log, index) => (
+                    <tr key={log.id ? `${log.id}-${index}` : `sec-${index}`} className="hover:bg-slate-50/50 transition-colors">
                       <td className="py-3.5 px-4 font-mono text-slate-500 text-[10px] whitespace-nowrap">
                         {new Date(log.timestamp).toLocaleString("en-US", {
                           year: "numeric",
@@ -733,8 +733,8 @@ export default function UserManagement({
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium">
                   {systemAuditLogs.length > 0 ? (
-                    systemAuditLogs.map((log) => (
-                      <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
+                    systemAuditLogs.map((log, index) => (
+                      <tr key={log.id ? `${log.id}-${index}` : `sa-${index}`} className="hover:bg-slate-50/50 transition-colors">
                         <td className="py-3.5 px-4 font-mono text-slate-500 text-[10px] whitespace-nowrap">
                           {new Date(log.timestamp).toLocaleString("en-US", {
                             year: "numeric",
@@ -963,7 +963,7 @@ export default function UserManagement({
                           setMfaEnrolled(false);
                           // Generate security audit log for de-enrollment / reset
                           onAddSecurityLog({
-                            id: "sec-" + Date.now(),
+                            id: `sec-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
                             timestamp: new Date().toISOString(),
                             actorId: currentUser.id,
                             actorName: currentUser.employeeName,

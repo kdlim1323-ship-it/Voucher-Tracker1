@@ -1002,10 +1002,10 @@ export default function OfficeManagement({
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredOffices.length > 0 ? (
-                filteredOffices.map((off) => {
+                filteredOffices.map((off, idx) => {
                   const usageState = getUsageState(off);
                   return (
-                    <tr key={off.code} className="hover:bg-slate-50/50 transition-colors">
+                    <tr key={off.code ? `${off.code}-${idx}` : `off-${idx}`} className="hover:bg-slate-50/50 transition-colors">
                       
                       {/* Column 1: Status */}
                       <td className="py-3.5 px-4">

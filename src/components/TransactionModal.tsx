@@ -123,7 +123,7 @@ export default function TransactionModal({
     const remarksText = `Returned To: ${pullOutReturnedTo.trim()} | Reason: ${pullOutReason.trim()}${pullOutRemarks.trim() ? ` | Remarks: ${pullOutRemarks.trim()}` : ""}`;
     
     const newHistoryEntry: AuditLogEntry = {
-      id: "h-" + Date.now(),
+      id: `h-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       action: "Pulled-Out / Returned Voucher",
       prevStatus: transaction.currentStatus,
       newStatus: WorkflowStatus.PULLED_OUT,
@@ -160,7 +160,7 @@ export default function TransactionModal({
 
     const timestamp = new Date().toISOString();
     const newHistoryEntry: AuditLogEntry = {
-      id: "h-" + Date.now(),
+      id: `h-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       action: "Received Back / Returned to Office",
       prevStatus: WorkflowStatus.PULLED_OUT,
       newStatus: prevStatusBeforePullOut,
@@ -534,7 +534,7 @@ export default function TransactionModal({
 
     // Build the permanent audit log entry
     const newHistoryEntry: AuditLogEntry = {
-      id: "h-" + Date.now(),
+      id: `h-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       action: pendingAction.name,
       prevStatus,
       newStatus,
@@ -945,7 +945,7 @@ export default function TransactionModal({
             {transaction.history.map((log, index) => {
               const isLatest = index === transaction.history.length - 1;
               return (
-                <div key={log.id} className="relative text-xs">
+                <div key={log.id ? `${log.id}-${index}` : `log-${index}`} className="relative text-xs">
                   {/* Indicator bullet */}
                   <div className={`absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full border-2 ${
                     isLatest 

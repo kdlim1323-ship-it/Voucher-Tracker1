@@ -979,10 +979,10 @@ export default function Dashboard({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {recentlyProcessed.map((tx) => {
+              {recentlyProcessed.map((tx, idx) => {
                 const txBreakdown = calculateTransactionTimeBreakdown(tx);
                 return (
-                  <tr key={tx.id} className="hover:bg-slate-50/50 text-slate-700 transition-colors">
+                  <tr key={tx.id ? `${tx.id}-${idx}` : `recent-${idx}`} className="hover:bg-slate-50/50 text-slate-700 transition-colors">
                     <td className="py-3.5 px-4 font-mono font-bold text-slate-800">
                       {tx.transactionNumber}
                     </td>

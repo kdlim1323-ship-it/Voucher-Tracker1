@@ -91,12 +91,46 @@ export default function App() {
 
   const [securityLogs, setSecurityLogs] = useState<SecurityLogEntry[]>(() => {
     const saved = localStorage.getItem("rppt_security_logs");
-    return saved ? JSON.parse(saved) : [];
+    if (!saved) return [];
+    try {
+      const parsed: SecurityLogEntry[] = JSON.parse(saved);
+      const seen = new Set<string>();
+      return parsed.map((log, index) => {
+        let uniqueId = log.id;
+        if (!uniqueId || seen.has(uniqueId)) {
+          uniqueId = `${log.id || "sec"}-${index}-${Math.random().toString(36).substring(2, 7)}`;
+        }
+        seen.add(uniqueId);
+        return {
+          ...log,
+          id: uniqueId
+        };
+      });
+    } catch {
+      return [];
+    }
   });
 
   const [systemAuditLogs, setSystemAuditLogs] = useState<SystemAuditTrailEntry[]>(() => {
     const saved = localStorage.getItem("rppt_system_audit_logs");
-    return saved ? JSON.parse(saved) : [];
+    if (!saved) return [];
+    try {
+      const parsed: SystemAuditTrailEntry[] = JSON.parse(saved);
+      const seen = new Set<string>();
+      return parsed.map((log, index) => {
+        let uniqueId = log.id;
+        if (!uniqueId || seen.has(uniqueId)) {
+          uniqueId = `${log.id || "sa"}-${index}-${Math.random().toString(36).substring(2, 7)}`;
+        }
+        seen.add(uniqueId);
+        return {
+          ...log,
+          id: uniqueId
+        };
+      });
+    } catch {
+      return [];
+    }
   });
 
   // 2. Sync to localStorage
@@ -166,7 +200,7 @@ export default function App() {
   const handleRecordSystemAuditLog = (actionType: "Deletion" | "Import" | "Export" | "Print" | "Assignment", details: string, fileName?: string) => {
     if (!currentUser) return;
     const newLog: SystemAuditTrailEntry = {
-      id: "sa-" + Date.now(),
+      id: `sa-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       timestamp: new Date().toISOString(),
       userAccount: `${currentUser.employeeName} (${currentUser.username}) - ${currentUser.role}`,
       actionType,
@@ -359,7 +393,7 @@ export default function App() {
     const timestamp = now.toISOString();
 
     const initialLog: AuditLogEntry = {
-      id: "h-" + Date.now() + "-init",
+      id: `h-${Date.now()}-${Math.random().toString(36).substring(2, 7)}-init`,
       action: "Document Logged & Encoded",
       prevStatus: null,
       newStatus: WorkflowStatus.ENCODED,
@@ -373,7 +407,7 @@ export default function App() {
 
     const newTx: Transaction = {
       ...newTxData,
-      id: "tx-" + Date.now(),
+      id: `tx-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       transactionNumber: generatedNum,
       dateReceived: timestamp,
       currentStatus: WorkflowStatus.ENCODED,

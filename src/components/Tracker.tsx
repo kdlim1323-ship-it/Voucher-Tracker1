@@ -675,11 +675,11 @@ export default function Tracker({
             </thead>
             <tbody className="divide-y divide-slate-100">
               {sortedTransactions.length > 0 ? (
-                sortedTransactions.map((tx) => {
+                sortedTransactions.map((tx, txIdx) => {
                   const assignedUser = users.find((u) => u.id === tx.currentAssignedUserId);
                   return (
                     <tr
-                      key={tx.id}
+                      key={tx.id ? `${tx.id}-${txIdx}` : `tx-${txIdx}`}
                       className="hover:bg-slate-50/50 text-slate-600 transition-colors cursor-pointer group"
                       onClick={() => onViewTransaction(tx)}
                     >
