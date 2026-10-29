@@ -1,0 +1,260 @@
+rules_version = '2';
+
+/**
+ * ============================================================================
+ * UNDEPLOYED DRAFT - FOR REVIEW AND SECURITY TESTING ONLY
+ * ============================================================================
+ * 
+ * Voucher Tracker - Cloud Firestore Security Rules
+ * Version: 1.0-draft (Phase 1 Preparation)
+ * 
+ * Status: PENDING FORMAL SECURITY TESTING. NOT YET DEPLOYED.
+ * 
+ * Enforces:
+ * 1. Least-privilege profile privacy (/users vs /publicProfiles).
+ * 2. Administrative barrier: Admins cannot create, modify, or demote System Owners.
+ * 3. Self-elevation prevention: Users cannot alter their own role, status, or office.
+ * 4. Atomic transaction & audit trail binding via existsAfter() / getAfter().
+ * 5. Append-only, immutable audit history subcollection (/transactions/{txId}/auditLogs/{seq}).
+ * 6. Atomic, permanent tracking number reservations (/trackingNumbers/{num}).
+ * 7. Authorized transitions across all 14 workflow statuses for all 7 roles.
+ */
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ------------------------------------------------------------------------
+    // HELPER FUNCTIONS: User Identity & Role Resolution
+    // ------------------------------------------------------------------------
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function getUserDoc(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data;
+    }
+
+    function isActiveUser() {
+      return isAuthenticated() &&
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             getUserDoc(request.auth.uid).isActive == true;
+    }
+
+    function getUserRole() {
+      return getUserDoc(request.auth.uid).role;
+    }
+
+    function isSystemOwner() {
+      return isActiveUser() && getUserRole() == "System Owner";
+    }
+
+    function isSystemAdmin() {
+      return isActiveUser() && getUserRole() == "System Administrator";
+    }
+
+    function isEncoder() {
+      return isActiveUser() && getUserRole() == "Encoder / Office Clerk";
+    }
+
+    function isBookkeeper() {
+      return isActiveUser() && getUserRole() == "Bookkeeper";
+    }
+
+    function isDistributor() {
+      return isActiveUser() && getUserRole() == "Distributor";
+    }
+
+    function isAuditor() {
+      return isActiveUser() && getUserRole() == "Auditor";
+    }
+
+    function isReviewer() {
+      return isActiveUser() && getUserRole() == "Reviewer";
+    }
+
+    // ------------------------------------------------------------------------
+    // COLLECTION: /users/{userId} (Sensitive Private User Profiles)
+    // ------------------------------------------------------------------------
+    match /users/{userId} {
+      // Private profiles readable only by account owner, System Owner, or Admin (non-owner target)
+      allow read: if isAuthenticated() && (
+        request.auth.uid == userId ||
+        isSystemOwner() ||
+        (isSystemAdmin() && resource.data.role != "System Owner")
+      );
+
+      // Account creation
+      allow create: if isAuthenticated() && (
+        isSystemOwner() ||
+        (isSystemAdmin() && request.resource.data.role != "System Owner")
+      );
+
+      // Profile updates: Strict administrative barriers & self-elevation lock
+      allow update: if isAuthenticated() && (
+        // 1. System Owner has full management authority
+        isSystemOwner() ||
+
+        // 2. System Administrator managing operational staff
+        (
+          isSystemAdmin() &&
+          resource.data.role != "System Owner" &&
+          request.resource.data.role != "System Owner" &&
+          request.auth.uid != userId &&
+          !request.resource.data.keys().hasAny(['ownerPermissions'])
+        ) ||
+
+        // 3. Regular users editing own non-privileged details
+        (
+          request.auth.uid == userId &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'role', 'assignedOffice', 'isActive', 'ownerPermissions',
+            'id', 'username', 'email', 'createdAt'
+          ])
+        )
+      );
+
+      // Hard deletion is forbidden; accounts are deactivated via isActive: false
+      allow delete: if false;
+    }
+
+    // ------------------------------------------------------------------------
+    // COLLECTION: /publicProfiles/{userId} (Public Directory)
+    // ------------------------------------------------------------------------
+    match /publicProfiles/{userId} {
+      // Directory readable by all active authenticated staff
+      allow read: if isActiveUser();
+
+      // Writable only by System Owner, Admin (non-owner), or user updating non-privileged fields
+      allow write: if isSystemOwner() ||
+                   (isSystemAdmin() && request.resource.data.role != "System Owner") ||
+                   (request.auth.uid == userId &&
+                    !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'assignedOffice', 'isActive']));
+    }
+
+    // ------------------------------------------------------------------------
+    // COLLECTION: /offices/{officeCode} (Office Codes Master List)
+    // ------------------------------------------------------------------------
+    match /offices/{officeCode} {
+      allow read: if isActiveUser();
+      allow write: if isSystemOwner() || isSystemAdmin();
+    }
+
+    // ------------------------------------------------------------------------
+    // COLLECTION: /trackingNumbers/{trackingNumber} (Atomic Reservations)
+    // ------------------------------------------------------------------------
+    match /trackingNumbers/{trackingNumber} {
+      allow read: if isActiveUser();
+      
+      // Atomic reservation: only permitted if document does not exist yet
+      allow create: if isActiveUser() &&
+                    !exists(/databases/$(database)/documents/trackingNumbers/$(trackingNumber)) &&
+                    request.resource.data.reservedBy == request.auth.uid;
+
+      // Reservations are immutable and permanent
+      allow update, delete: if false;
+    }
+
+    // ------------------------------------------------------------------------
+    // COLLECTION: /transactions/{txId} (Voucher Transactions)
+    // ------------------------------------------------------------------------
+    match /transactions/{txId} {
+      allow read: if isActiveUser();
+
+      // Create initial voucher: Allowed for Encoder, Admin, Owner
+      allow create: if isActiveUser() &&
+                    (isEncoder() || isSystemAdmin() || isSystemOwner()) &&
+                    request.resource.data.currentStatus in ["Received", "Encoded"] &&
+                    request.resource.data.auditCount == 1 &&
+                    // Must atomically reserve the tracking number in the same batch
+                    existsAfter(/databases/$(database)/documents/trackingNumbers/$(request.resource.data.transactionNumber)) &&
+                    // Must atomically create the first audit log entry
+                    existsAfter(/databases/$(database)/documents/transactions/$(txId)/auditLogs/1);
+
+      // Updates: Enforce valid workflow transitions and atomic audit logging
+      allow update: if isActiveUser() && (
+        // Non-status field updates (e.g., editing particulars/amount prior to submission)
+        (
+          request.resource.data.currentStatus == resource.data.currentStatus &&
+          (isEncoder() || isSystemAdmin() || isSystemOwner())
+        ) ||
+
+        // Status transition updates: Must increment auditCount and write matching audit log
+        (
+          request.resource.data.currentStatus != resource.data.currentStatus &&
+          request.resource.data.auditCount == resource.data.auditCount + 1 &&
+          existsAfter(/databases/$(database)/documents/transactions/$(txId)/auditLogs/$(string(request.resource.data.auditCount))) &&
+          getAfter(/databases/$(database)/documents/transactions/$(txId)/auditLogs/$(string(request.resource.data.auditCount))).data.statusTo == request.resource.data.currentStatus &&
+          getAfter(/databases/$(database)/documents/transactions/$(txId)/auditLogs/$(string(request.resource.data.auditCount))).data.statusFrom == resource.data.currentStatus &&
+          getAfter(/databases/$(database)/documents/transactions/$(txId)/auditLogs/$(string(request.resource.data.auditCount))).data.userId == request.auth.uid &&
+          isValidWorkflowTransition(resource.data.currentStatus, request.resource.data.currentStatus)
+        )
+      );
+
+      // Vouchers cannot be deleted directly; they must transition to Archived
+      allow delete: if false;
+
+      // ----------------------------------------------------------------------
+      // SUBCOLLECTION: /transactions/{txId}/auditLogs/{seq} (Immutable History)
+      // ----------------------------------------------------------------------
+      match /auditLogs/{seq} {
+        allow read: if isActiveUser();
+
+        // Append-only: Can only be created if matching the pending transaction auditCount
+        allow create: if isActiveUser() &&
+                      seq == string(getAfter(/databases/$(database)/documents/transactions/$(txId)).data.auditCount) &&
+                      request.resource.data.userId == request.auth.uid &&
+                      request.resource.data.timestamp == request.time;
+
+        // Completely immutable:
+        allow update, delete: if false;
+      }
+    }
+
+    // ------------------------------------------------------------------------
+    // WORKFLOW TRANSITION MATRIX (All 14 Statuses & 7 Roles)
+    // ------------------------------------------------------------------------
+    function isValidWorkflowTransition(fromStatus, toStatus) {
+      // System Owner has administrative override permission across all states
+      return isSystemOwner() ||
+        // Encoder
+        (isEncoder() && (
+          (fromStatus == "Received" && toStatus == "Encoded") ||
+          (fromStatus == "Encoded" && toStatus == "Forwarded to Bookkeeper") ||
+          (fromStatus == "Returned for Correction" && toStatus == "Encoded")
+        )) ||
+        // Bookkeeper
+        (isBookkeeper() && (
+          (fromStatus == "Forwarded to Bookkeeper" && toStatus == "Received by Bookkeeper") ||
+          (fromStatus == "Received by Bookkeeper" && toStatus == "Recorded") ||
+          (fromStatus == "Recorded" && toStatus == "Submitted to Distributor") ||
+          (fromStatus == "Recorded" && toStatus == "Returned for Correction")
+        )) ||
+        // Distributor
+        (isDistributor() && (
+          (fromStatus == "Submitted to Distributor" && toStatus == "Forwarded to Auditor")
+        )) ||
+        // Auditor
+        (isAuditor() && (
+          (fromStatus == "Forwarded to Auditor" && toStatus == "Under Audit") ||
+          (fromStatus == "Under Audit" && toStatus == "Forwarded to Reviewer") ||
+          (fromStatus == "Under Audit" && toStatus == "Returned for Correction") ||
+          (fromStatus == "Under Audit" && toStatus == "Returned / Pulled-Out") ||
+          (fromStatus == "Returned / Pulled-Out" && toStatus == resource.data.prevStatusBeforePullOut)
+        )) ||
+        // Reviewer
+        (isReviewer() && (
+          (fromStatus == "Forwarded to Reviewer" && toStatus == "Under Review") ||
+          (fromStatus == "Under Review" && toStatus == "Completed") ||
+          (fromStatus == "Under Review" && toStatus == "Returned for Correction") ||
+          (fromStatus == "Under Review" && toStatus == "Returned / Pulled-Out") ||
+          (fromStatus == "Returned / Pulled-Out" && toStatus == resource.data.prevStatusBeforePullOut) ||
+          (fromStatus == "Completed" && toStatus == "Archived")
+        )) ||
+        // System Administrator
+        (isSystemAdmin() && (
+          fromStatus != toStatus
+        ));
+    }
+  }
+}
